@@ -28,29 +28,38 @@ def VeriCek():
         url_list.remove('')
     
     for url in url_list:
-        counter = 0
+        counter = 1
+        
+           
+        if url[:-1].endswith("page="):
+            pass    
+        else:
+            url = url + f"?page={counter}"
+        links = []
+        url = url.strip()
+        
+        items =[]
+        response_urls = requests.get(url)
+        html_content1 = response_urls.content
+        soup_1= BeautifulSoup(html_content1, "html.parser")
+        divs = soup_1.find_all("div",{"class":"MPProductItem"})
+        
+        last_page_list = soup_1.find_all("li",{"class":"MPProductPagination-PageItem"})
         try:
-            counter += 1
-            if url[:-1].endswith("page="):
-                pass    
-            else:
-                url = url + f"?page={counter}"
-            links = []
-            url = url.strip()
-            
-            items =[]
-            response_urls = requests.get(url)
-            html_content1 = response_urls.content
-            soup_1= BeautifulSoup(html_content1, "html.parser")
-            divs = soup_1.find_all("div",{"class":"MPProductItem"})
-            
-            for div in divs:
-                href = "https://umico.az" + div.find("a").get("href")
-                links.append(href)
-            
-                  
-            while True:
-                counter +=1
+            last_page = int(last_page_list[-2].find("a").text)
+        except ValueError:
+            last_page = int(last_page_list[-1].find("a").text)
+
+        print("Max Page:",last_page)
+        
+        for div in divs:
+            href = "https://umico.az" + div.find("a").get("href")
+            links.append(href)
+        counter +=1
+                
+        while True:
+            try:
+                
                 url = url.split("?")
                 url[1] = f"page={counter}"
                 url = "?".join(url)   
@@ -59,21 +68,25 @@ def VeriCek():
                 html_content1 = response_urls.content
                 soup_1= BeautifulSoup(html_content1, "html.parser")
                 divs = soup_1.find_all("div",{"class":"MPProductItem"})
-                if len(divs)==0:
-                    break
-                for div in divs:
-                    href = "https://umico.az" + div.find("a").get("href")
-                    links.append(href)
-                    
-                
-                print("The len of the links:" +  str(len(links)))
+            except:
+                counter += 1
+                continue    
 
-            counter2 = 0
-            for i in links: 
+            if counter > last_page:
+                break
+            for div in divs:
+                href = "https://umico.az" + div.find("a").get("href")
+                links.append(href)
+                
+            counter +=1
+            print("The len of the links:" +  str(len(links)))
+
+        
+        for i in links: 
+            try:
                 data = []       
                 print(i)
-                if counter2 == 2:
-                    break
+                
                 response = requests.get(i)
                 html_content = response.content
                 soup= BeautifulSoup(html_content, "html.parser")
@@ -109,13 +122,13 @@ def VeriCek():
                 data.append("pc")#for unit
                 print(data)
                 data_all.append(data)
-                counter2 += 1
+            except:
+                continue
                 
                 
                 
-        except:
                 
-            continue
+        
     
     print(data_all)
     
