@@ -14,13 +14,103 @@ import time
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions
+import threading
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from openpyxl import Workbook
+MAX_THREADS = 30
+remaining = 0
 titles = ["name","description","category_id","sub_category_id","price","tax","status","discount","discount_type","tax_type","unit"]
+data_all = []
+links = []
+length = 0
+handled = 0
+dataframe = pd.DataFrame(columns= titles)
+category_id_r = ""
+
+counter = 1
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+def take_product_link(link_2):
+    products = []
+    try:
+        
+        print(link_2) 
+        response_urls = requests.get(link_2)
+        html_content1 = response_urls.content
+        soup_1= BeautifulSoup(html_content1, "html.parser")
+        divs = soup_1.find_all("div",{"class":"MPProductItem"})
+
+        for div in divs:
+            href = "https://umico.az" + div.find("a").get("href")
+            products.append(href)
+        return products
+    except:
+        pass
+    
+def take_product_data(link_1):
+     
+            
+    data = []
+    
+    
+                
+    
+    
+    print("*")
+    try:
+        response = requests.get(link_1)
+        html_content = response.content
+        soup= BeautifulSoup(html_content, "html.parser")
+        name_div = soup.find("div",{"class":"MPProductMainDesc"})
+        name = name_div.find("h1")
+        data.append(name.text)
+        description = soup.find("div",{"class":"MPShortInfo"}).prettify()
+        data.append(description)
+        category_id_div = soup.find("div",{"class":"MPMegaDiscounts-AllCategories"})
+        category_id_a = category_id_div.find("a")
+        
+        data.append(category_id_a.get("href").split("id=")[1])
+        data.append(category_id_a.get("href").split("id=")[1])#for subcategory id
+        price_div = soup.find("div",{"class":"MPProductMainDesc-OfferPrice"})
+        
+        
+        if price_div.find("span",{"class":"MPPrice-RetailPrice"}):
+            price = soup.find("span",{"class":"MPPrice-RetailPrice"})
+            data.append(price.text.replace("₼","").strip())
+        else:
+            old_price = price_div.find("span",{"class":"MPPrice-OldPrice"})
+            data.append(old_price.text.replace("₼","").strip())
+        
+        data.append("0")#for tax
+        data.append("1")#for status
+        if soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}):
+            discount = soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}).text.split(" ")[0].replace("%","")
+            data.append(discount)
+        else:
+            data.append("0")
+        data.append("percent")#for discount type
+        data.append("percent")#for tax type
+        data.append("pc")#for unit
+        """print(data)"""
+        return data
+    except:
+        pass
+    
+    
+    
 
 def VeriCek():
+    global data_all
+    global counter
+    global links
+    global dataframe
+    global category_id_r
     
-    dataframe = pd.DataFrame(columns= titles)
     file_name = str(datetime.now())[:19].replace(":", ".").replace(" ", "_") +".xlsx"#I will declare the file name as current date 
-    data_all =[]
+    
+    
     urls = TextArea.get("1.0",END)
     url_list = urls.split("\n") 
     
@@ -28,16 +118,17 @@ def VeriCek():
         url_list.remove('')
     
     for url in url_list:
-        counter = 1
+        category_id_r= url.split("/")[4].split("-")[0]
+        
         
            
-        if url[:-1].endswith("page="):
+        if url[:-1].endswith("page=") or url[:-2].endswith("page=") or url[-3].endswith("page="):
             pass    
         else:
-            url = url + f"?page={counter}"
+            url = url + f"page=1"
         links = []
         url = url.strip()
-        
+        print(url)
         items =[]
         response_urls = requests.get(url)
         html_content1 = response_urls.content
@@ -45,19 +136,39 @@ def VeriCek():
         divs = soup_1.find_all("div",{"class":"MPProductItem"})
         
         last_page_list = soup_1.find_all("li",{"class":"MPProductPagination-PageItem"})
-        try:
-            last_page = int(last_page_list[-2].find("a").text)
-        except ValueError:
-            last_page = int(last_page_list[-1].find("a").text)
+        print(last_page_list)
 
-        print("Max Page:",last_page)
-        
+        try:
+
+            last_page = int(last_page_list[-2].find("a").text)
+        except ValueError or IndexError:
+            last_page = int(last_page_list[-1].find("a").text)
         for div in divs:
             href = "https://umico.az" + div.find("a").get("href")
             links.append(href)
-        counter +=1
-                
-        while True:
+
+        print("Max Page:",last_page)
+        category_urls = []
+        for i in range(2,last_page+1):
+            
+            main_url = url.split("?")
+            main_url[1] =  f"page={i}"
+            main_url = "?".join(main_url)
+            print(main_url)
+            category_urls.append(main_url)
+        
+        print(category_urls)
+        print(len(category_urls))
+        """counter +=1"""
+        with ThreadPoolExecutor(max_workers=min(len(category_urls), 20)) as executor:
+           
+            futures1 = [executor.submit(take_product_link, category_url)for category_url in category_urls]
+            for future1 in as_completed(futures1):
+                links.extend(future1.result())
+
+        executor.shutdown()        
+        print("The len of the links:" +  str(len(links)))
+        """while True:
             try:
                 
                 url = url.split("?")
@@ -79,69 +190,56 @@ def VeriCek():
                 links.append(href)
                 
             counter +=1
-            print("The len of the links:" +  str(len(links)))
+            print("The len of the links:" +  str(len(links)))"""
+        handled = len(links)
+        with ThreadPoolExecutor(max_workers=min(len(links), 70)) as executor:
+            
+            futures = [executor.submit(take_product_data, link) for link in links]
+            for future in as_completed(futures):
+                
+                
+                data_all.append(future.result())
 
-        
-        for i in links: 
-            try:
-                data = []       
-                print(i)
-                
-                response = requests.get(i)
-                html_content = response.content
-                soup= BeautifulSoup(html_content, "html.parser")
-                name_div = soup.find("div",{"class":"MPProductMainDesc"})
-                name = name_div.find("h1")
-                data.append(name.text)
-                description = soup.find("div",{"class":"MPShortInfo"})
-                data.append(description.prettify())
-                category_id_div = soup.find("div",{"class":"MPMegaDiscounts-AllCategories"})
-                category_id_a = category_id_div.find("a")
-                
-                data.append(category_id_a.get("href").split("id=")[1])
-                data.append("0")#for subcategory id
-                price_div = soup.find("div",{"class":"MPProductMainDesc-OfferPrice"})
-                
-                
-                if price_div.find("span",{"class":"MPPrice-RetailPrice"}):
-                    price = soup.find("span",{"class":"MPPrice-RetailPrice"})
-                    data.append(price.text.replace("₼","").strip())
-                else:
-                    old_price = price_div.find("span",{"class":"MPPrice-OldPrice"})
-                    data.append(old_price.text.replace("₼","").strip())
-                
-                data.append("0")#for tax
-                data.append("1")#for status
-                if soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}):
-                    discount = soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}).text.split(" ")[0].replace("%","")
-                    data.append(discount)
-                else:
-                    data.append("0")
-                data.append("percent")#for discount type
-                data.append("percent")#for tax type
-                data.append("pc")#for unit
-                print(data)
-                data_all.append(data)
-            except:
-                continue
-                
-                
-                
-                
-        
-    
+
+        executor.shutdown()
     print(data_all)
-    
-    for i in data_all:#adding the dataframe our data
-        
-        dataframe.loc[len(dataframe)] = i
+    print(len(data_all))
+
+            
+
         
 
-    
-    
+        
+                
+                
+                
+                
+        
+    for i in data_all:
+        try:
+            i[2] = category_id_r
+        except TypeError:
+            continue
 
     
-    dataframe.to_excel(file_name, index=False)#exporting an excel file
+    print("data all uzunluk:"+str(len(data_all)))
+    wb = Workbook()
+    sheet = wb.active
+    sheet.append(["name","description","category_id","sub_category_id","price","tax","status","discount","discount_type","tax_type","unit"])
+    for row in data_all:
+        try:
+            sheet.append(row)
+        except TypeError:
+            continue
+
+    wb.save(f'{file_name}')
+    
+    
+        
+    data_all.clear()
+    links.clear()
+    
+    
     messagebox.showinfo("Başarılı İşlem",f"Veri Başarıyla {file_name} Dosyasına Kaydedildi!")
 
 
