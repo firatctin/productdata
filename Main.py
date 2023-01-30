@@ -7,13 +7,9 @@ import csv
 import requests
 from bs4 import BeautifulSoup
 import openpyxl
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
+
 import time
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions
+
 import threading
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,6 +25,12 @@ dataframe = pd.DataFrame(columns= titles)
 category_id_r = ""
 
 counter = 1
+def isNone(liste):
+    for i in liste:
+        if i == None:
+            return True
+        
+    return False
 def split(a, n):
     k, m = divmod(len(a), n)
     return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
@@ -41,13 +43,36 @@ def take_product_link(link_2):
         html_content1 = response_urls.content
         soup_1= BeautifulSoup(html_content1, "html.parser")
         divs = soup_1.find_all("div",{"class":"MPProductItem"})
-
+        if isNone(divs):
+            try:
+                time.sleep(0.1)
+                response_urls = requests.get(link_2)
+                html_content1 = response_urls.content
+                soup_1= BeautifulSoup(html_content1, "html.parser")
+                divs = soup_1.find_all("div",{"class":"MPProductItem"})
+            except:
+                pass
         for div in divs:
             href = "https://umico.az" + div.find("a").get("href")
             products.append(href)
+        print(products)
+        
         return products
     except:
-        pass
+        try:
+            time.sleep(1)
+            response_urls = requests.get(link_2)
+            html_content1 = response_urls.content
+            soup_1= BeautifulSoup(html_content1, "html.parser")
+            divs = soup_1.find_all("div",{"class":"MPProductItem"})
+
+            for div in divs:
+                href = "https://umico.az" + div.find("a").get("href")
+                products.append(href)
+            print(products)
+            return products
+        except:
+            pass
     
 def take_product_data(link_1):
      
@@ -94,9 +119,128 @@ def take_product_data(link_1):
         data.append("percent")#for tax type
         data.append("pc")#for unit
         """print(data)"""
+        if isNone(data):
+            data = []
+            try:
+                response = requests.get(link_1)
+                html_content = response.content
+                soup= BeautifulSoup(html_content, "html.parser")
+                name_div = soup.find("div",{"class":"MPProductMainDesc"})
+                name = name_div.find("h1")
+                data.append(name.text)
+                description = soup.find("div",{"class":"MPShortInfo"}).prettify()
+                data.append(description)
+                category_id_div = soup.find("div",{"class":"MPMegaDiscounts-AllCategories"})
+                category_id_a = category_id_div.find("a")
+                
+                data.append(category_id_a.get("href").split("id=")[1])
+                data.append(category_id_a.get("href").split("id=")[1])#for subcategory id
+                price_div = soup.find("div",{"class":"MPProductMainDesc-OfferPrice"})
+                
+                
+                if price_div.find("span",{"class":"MPPrice-RetailPrice"}):
+                    price = soup.find("span",{"class":"MPPrice-RetailPrice"})
+                    data.append(price.text.replace("₼","").strip())
+                else:
+                    old_price = price_div.find("span",{"class":"MPPrice-OldPrice"})
+                    data.append(old_price.text.replace("₼","").strip())
+                
+                data.append("0")#for tax
+                data.append("1")#for status
+                if soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}):
+                    discount = soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}).text.split(" ")[0].replace("%","")
+                    data.append(discount)
+                else:
+                    data.append("0")
+                data.append("percent")#for discount type
+                data.append("percent")#for tax type
+                data.append("pc")#for unit
+                """print(data)"""
+                return data
+            except:
+                try:
+                    time.sleep(0.1)
+                    response = requests.get(link_1)
+                    html_content = response.content
+                    soup= BeautifulSoup(html_content, "html.parser")
+                    name_div = soup.find("div",{"class":"MPProductMainDesc"})
+                    name = name_div.find("h1")
+                    data.append(name.text)
+                    description = soup.find("div",{"class":"MPShortInfo"}).prettify()
+                    data.append(description)
+                    category_id_div = soup.find("div",{"class":"MPMegaDiscounts-AllCategories"})
+                    category_id_a = category_id_div.find("a")
+                    
+                    data.append(category_id_a.get("href").split("id=")[1])
+                    data.append(category_id_a.get("href").split("id=")[1])#for subcategory id
+                    price_div = soup.find("div",{"class":"MPProductMainDesc-OfferPrice"})
+                    
+                    
+                    if price_div.find("span",{"class":"MPPrice-RetailPrice"}):
+                        price = soup.find("span",{"class":"MPPrice-RetailPrice"})
+                        data.append(price.text.replace("₼","").strip())
+                    else:
+                        old_price = price_div.find("span",{"class":"MPPrice-OldPrice"})
+                        data.append(old_price.text.replace("₼","").strip())
+                    
+                    data.append("0")#for tax
+                    data.append("1")#for status
+                    if soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}):
+                        discount = soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}).text.split(" ")[0].replace("%","")
+                        data.append(discount)
+                    else:
+                        data.append("0")
+                    data.append("percent")#for discount type
+                    data.append("percent")#for tax type
+                    data.append("pc")#for unit
+                    """print(data)"""
+                    if isNone(data):
+                        print("There is a none")
+                    return data
+                except:
+                    pass
+        
         return data
     except:
-        pass
+        try:
+            time.sleep(1)
+            response = requests.get(link_1)
+            html_content = response.content
+            soup= BeautifulSoup(html_content, "html.parser")
+            name_div = soup.find("div",{"class":"MPProductMainDesc"})
+            name = name_div.find("h1")
+            data.append(name.text)
+            description = soup.find("div",{"class":"MPShortInfo"}).prettify()
+            data.append(description)
+            category_id_div = soup.find("div",{"class":"MPMegaDiscounts-AllCategories"})
+            category_id_a = category_id_div.find("a")
+            
+            data.append(category_id_a.get("href").split("id=")[1])
+            data.append(category_id_a.get("href").split("id=")[1])#for subcategory id
+            price_div = soup.find("div",{"class":"MPProductMainDesc-OfferPrice"})
+            
+            
+            if price_div.find("span",{"class":"MPPrice-RetailPrice"}):
+                price = soup.find("span",{"class":"MPPrice-RetailPrice"})
+                data.append(price.text.replace("₼","").strip())
+            else:
+                old_price = price_div.find("span",{"class":"MPPrice-OldPrice"})
+                data.append(old_price.text.replace("₼","").strip())
+            
+            data.append("0")#for tax
+            data.append("1")#for status
+            if soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}):
+                discount = soup.find("div",{"class":"MPProductItem-Discount MPProductMainDesc-Discount"}).text.split(" ")[0].replace("%","")
+                data.append(discount)
+            else:
+                data.append("0")
+            data.append("percent")#for discount type
+            data.append("percent")#for tax type
+            data.append("pc")#for unit
+            """print(data)"""
+            return data
+        except:
+            pass
     
     
     
